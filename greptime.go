@@ -14,8 +14,8 @@ import (
 	"github.com/GreptimeTeam/greptimedb-ingester-go/table"
 	"github.com/GreptimeTeam/greptimedb-ingester-go/table/types"
 
-	"github.com/infrago/infra"
 	. "github.com/infrago/base"
+	"github.com/infrago/infra"
 	"github.com/infrago/trace"
 )
 
@@ -253,7 +253,10 @@ func greptimeDefaultFields() map[string]string {
 		"time":           "timestamp",
 		"start":          "start_time_unix_nano",
 		"end":            "end_time_unix_nano",
-		"cost":           "duration_unix_nano",
+		"duration":       "duration_nano",
+		"duration_nano":  "duration_nano",
+		"service_name":   "service_name",
+		"span_name":      "span_name",
 		"step":           "step",
 		"trace_id":       "trace_id",
 		"span_id":        "span_id",
@@ -271,17 +274,25 @@ func greptimeDefaultFields() map[string]string {
 
 func orderedPairs(fields map[string]string) []fieldPair {
 	order := []string{
-		"project", "profile", "node", "time", "start", "end", "cost", "step",
+		"project", "profile", "node", "time", "start", "end", "duration", "duration_nano",
+		"service_name", "span_name", "step",
 		"trace_id", "span_id", "parent_id", "parent_span_id",
 		"kind", "entry", "status", "code", "result",
 		"attributes", "resource",
 	}
 	pairs := make([]fieldPair, 0, len(fields))
 	used := map[string]bool{}
+	usedTarget := map[string]bool{}
 	for _, source := range order {
 		if target, ok := fields[source]; ok && target != "" {
+			target = strings.TrimSpace(target)
+			if target == "" || usedTarget[target] {
+				used[source] = true
+				continue
+			}
 			pairs = append(pairs, fieldPair{source: source, target: target})
 			used[source] = true
+			usedTarget[target] = true
 		}
 	}
 	extras := make([]string, 0)
@@ -293,18 +304,23 @@ func orderedPairs(fields map[string]string) []fieldPair {
 	}
 	sort.Strings(extras)
 	for _, source := range extras {
-		pairs = append(pairs, fieldPair{source: source, target: fields[source]})
+		target := strings.TrimSpace(fields[source])
+		if target == "" || usedTarget[target] {
+			continue
+		}
+		pairs = append(pairs, fieldPair{source: source, target: target})
+		usedTarget[target] = true
 	}
 	return pairs
 }
 
 func greptimeFieldSpec(source string) (string, types.ColumnType) {
 	switch source {
-	case "project", "profile", "node", "step", "entry":
+	case "project", "profile", "node", "service_name", "span_name", "step", "entry":
 		return "tag", types.STRING
 	case "time":
 		return "timestamp", types.TIMESTAMP_NANOSECOND
-	case "start", "end", "cost", "code":
+	case "start", "end", "duration", "duration_nano", "code":
 		return "field", types.INT64
 	default:
 		return "field", types.STRING
@@ -314,60 +330,125 @@ func greptimeFieldSpec(source string) (string, types.ColumnType) {
 func convertGreptimeValue(source string, values map[string]any) any {
 	v, ok := values[source]
 	if !ok {
-		return ""
+		return nil
 	}
 	switch source {
 	case "time":
 		switch vv := v.(type) {
 		case time.Time:
+			if vv.IsZero() {
+				return nil
+			}
 			return vv
 		case int64:
+			if vv == 0 {
+				return nil
+			}
 			return time.Unix(0, vv)
 		case int:
+			if vv == 0 {
+				return nil
+			}
 			return time.Unix(0, int64(vv))
 		case float64:
+			if vv == 0 {
+				return nil
+			}
 			return time.Unix(0, int64(vv))
 		case string:
 			s := strings.TrimSpace(vv)
 			if s == "" {
-				return time.Unix(0, 0)
+				return nil
 			}
 			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+				if n == 0 {
+					return nil
+				}
 				return time.Unix(0, n)
 			}
 			// Keep parsing permissive for custom string formats.
 			if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+				if t.IsZero() {
+					return nil
+				}
 				return t
 			}
 			if t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", s); err == nil {
+				if t.IsZero() {
+					return nil
+				}
 				return t
 			}
 		}
-		return time.Unix(0, 0)
-	case "start", "end", "cost", "code":
+		return nil
+	case "start", "end", "duration", "duration_nano", "code":
 		switch vv := v.(type) {
 		case int64:
+			if vv == 0 {
+				return nil
+			}
 			return vv
 		case int:
+			if vv == 0 {
+				return nil
+			}
 			return int64(vv)
 		case float64:
+			if vv == 0 {
+				return nil
+			}
 			return int64(vv)
 		case string:
-			if n, err := strconv.ParseInt(strings.TrimSpace(vv), 10, 64); err == nil {
+			s := strings.TrimSpace(vv)
+			if s == "" {
+				return nil
+			}
+			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+				if n == 0 {
+					return nil
+				}
 				return n
 			}
 		}
-		return int64(0)
+		return nil
 	case "attributes", "resource":
 		switch vv := v.(type) {
 		case Map:
+			if len(vv) == 0 {
+				return nil
+			}
 			if b, err := json.Marshal(vv); err == nil {
 				return string(b)
 			}
 		}
+		if isEmptyGreptimeValue(v) {
+			return nil
+		}
 		return fmt.Sprintf("%v", v)
 	default:
+		if isEmptyGreptimeValue(v) {
+			return nil
+		}
 		return fmt.Sprintf("%v", v)
+	}
+}
+
+func isEmptyGreptimeValue(v any) bool {
+	switch vv := v.(type) {
+	case nil:
+		return true
+	case string:
+		return strings.TrimSpace(vv) == ""
+	case []byte:
+		return len(vv) == 0
+	case []any:
+		return len(vv) == 0
+	case []string:
+		return len(vv) == 0
+	case map[string]any:
+		return len(vv) == 0
+	default:
+		return false
 	}
 }
 

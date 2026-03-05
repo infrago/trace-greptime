@@ -4,9 +4,9 @@ go 1.25.3
 
 require (
 	github.com/GreptimeTeam/greptimedb-ingester-go v0.4.0
-	github.com/infrago/base v0.10.0
-	github.com/infrago/infra v0.10.0
-	github.com/infrago/trace v0.10.0
+	github.com/infrago/base v0.11.0
+	github.com/infrago/infra v0.11.0
+	github.com/infrago/trace v0.11.0
 )
 
 require (
@@ -23,9 +23,3 @@ require (
 	google.golang.org/grpc v1.56.3 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 )
-
-replace github.com/infrago/infra => ../bamgoo
-
-replace github.com/infrago/base => ../base
-
-replace github.com/infrago/trace => ../trace

@@ -248,6 +248,7 @@ type fieldPair struct {
 func greptimeDefaultFields() map[string]string {
 	return map[string]string{
 		"project":        "project",
+		"role":           "role",
 		"profile":        "profile",
 		"node":           "node",
 		"time":           "timestamp",
@@ -274,7 +275,7 @@ func greptimeDefaultFields() map[string]string {
 
 func orderedPairs(fields map[string]string) []fieldPair {
 	order := []string{
-		"project", "profile", "node", "time", "start", "end", "duration", "duration_nano",
+		"project", "role", "profile", "node", "time", "start", "end", "duration", "duration_nano",
 		"service_name", "span_name", "step",
 		"trace_id", "span_id", "parent_id", "parent_span_id",
 		"kind", "entry", "status", "code", "result",
@@ -316,7 +317,7 @@ func orderedPairs(fields map[string]string) []fieldPair {
 
 func greptimeFieldSpec(source string) (string, types.ColumnType) {
 	switch source {
-	case "project", "profile", "node", "service_name", "span_name", "step", "entry":
+	case "project", "role", "profile", "node", "service_name", "span_name", "step", "entry":
 		return "tag", types.STRING
 	case "time":
 		return "timestamp", types.TIMESTAMP_NANOSECOND

@@ -4,9 +4,9 @@ go 1.25.3
 
 require (
 	github.com/GreptimeTeam/greptimedb-ingester-go v0.4.0
-	github.com/infrago/base v0.25.0
-	github.com/infrago/infra v0.25.0
-	github.com/infrago/trace v0.25.0
+	github.com/infrago/base v0.26.0
+	github.com/infrago/infra v0.26.0
+	github.com/infrago/trace v0.26.0
 )
 
 require (
